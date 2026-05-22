@@ -127,7 +127,18 @@ Capture MJPEG frame:
 Capture YUYV frame:
 
 ```bash
+// Captured JPEG files are saved using GStreamer multifilesink.
+
 ./camera_app --source v4l2 --device /dev/video0 --format yuyv --capture frame.jpg
 ```
 
 If `autovideosink`, `videotestsrc`, `v4l2src`, `jpegdec`, or `jpegenc` are missing at runtime, install the usual GStreamer plugin packages for your Ubuntu image.
+
+## Notes
+
+MJPEG frame capture uses:
+
+v4l2src -> jpegparse -> multifilesink
+
+`jpegparse` is required to properly parse MJPEG frame boundaries,
+while `multifilesink` reliably saves individual camera frames as JPEG files.
