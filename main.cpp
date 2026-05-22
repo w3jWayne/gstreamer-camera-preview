@@ -153,6 +153,7 @@ public:
         source_ = nullptr;
         capsfilter_ = nullptr;
         decoder_ = nullptr;
+        parser_ = nullptr;
         convert_ = nullptr;
         encoder_ = nullptr;
         filesink_ = nullptr;
@@ -254,7 +255,7 @@ private:
         GstElement* sink = create_sink();
 
         if (source == nullptr || convert == nullptr || sink == nullptr) {
-            cleanup_partial_elements(source, nullptr, convert, sink);
+            cleanup_partial_elements(source, nullptr, nullptr, convert, sink);
             log_error("failed to create one or more GStreamer elements");
             stop();
             return false;
@@ -302,7 +303,7 @@ private:
 
         if (source == nullptr || capsfilter == nullptr || convert == nullptr || sink == nullptr ||
             (options_.format == VideoFormat::kMjpeg && decoder == nullptr)) {
-            cleanup_partial_elements(source, capsfilter, convert, sink, decoder);
+            cleanup_partial_elements(source, capsfilter, nullptr, convert, sink, decoder);
             log_error("failed to create one or more GStreamer elements");
             stop();
             return false;
@@ -366,6 +367,7 @@ private:
 
         GstElement* source = nullptr;
         GstElement* capsfilter = nullptr;
+        GstElement* parser = nullptr;
         GstElement* convert = nullptr;
         GstElement* encoder = nullptr;
         GstElement* sink = nullptr;
@@ -393,6 +395,7 @@ private:
             sink = gst_element_factory_make("filesink", "sink");
 
             if (options_.format == VideoFormat::kMjpeg) {
+                parser = gst_element_factory_make("jpegparse", "parser");
                 g_object_set(source, "device", options_.device.c_str(), "num-buffers", 1,
                              nullptr);
             } else {
@@ -406,10 +409,10 @@ private:
         if (source == nullptr || sink == nullptr ||
             (options_.source == SourceMode::kFake && (convert == nullptr || encoder == nullptr)) ||
             (options_.source == SourceMode::kV4L2 && options_.format == VideoFormat::kMjpeg &&
-             capsfilter == nullptr) ||
+             (capsfilter == nullptr || parser == nullptr)) ||
             (options_.source == SourceMode::kV4L2 && options_.format == VideoFormat::kYuyv &&
              (capsfilter == nullptr || convert == nullptr || encoder == nullptr))) {
-            cleanup_partial_elements(source, capsfilter, convert, sink, encoder);
+            cleanup_partial_elements(source, capsfilter, parser, convert, sink, encoder);
             log_error("failed to create one or more GStreamer elements");
             stop();
             return false;
@@ -439,7 +442,8 @@ private:
             g_object_set(capsfilter, "caps", caps, nullptr);
             gst_caps_unref(caps);
             gst_bin_add(GST_BIN(pipeline_), capsfilter);
-            linked = gst_element_link_many(source, capsfilter, sink, nullptr);
+            gst_bin_add(GST_BIN(pipeline_), parser);
+            linked = gst_element_link_many(source, capsfilter, parser, sink, nullptr);
         } else {
             GstCaps* caps = gst_caps_new_simple("video/x-raw", "format", G_TYPE_STRING, "YUY2",
                                                "width", G_TYPE_INT, options_.width, "height",
@@ -461,6 +465,7 @@ private:
 
         source_ = source;
         capsfilter_ = capsfilter;
+        parser_ = parser;
         convert_ = convert;
         encoder_ = encoder;
         filesink_ = sink;
@@ -605,13 +610,16 @@ private:
     }
 
     static void cleanup_partial_elements(GstElement* source, GstElement* capsfilter,
-                                         GstElement* convert, GstElement* sink,
-                                         GstElement* decoder = nullptr) {
+                                         GstElement* parser, GstElement* convert,
+                                         GstElement* sink, GstElement* decoder = nullptr) {
         if (source != nullptr) {
             gst_object_unref(source);
         }
         if (capsfilter != nullptr) {
             gst_object_unref(capsfilter);
+        }
+        if (parser != nullptr) {
+            gst_object_unref(parser);
         }
         if (decoder != nullptr) {
             gst_object_unref(decoder);
@@ -633,6 +641,7 @@ private:
     GstElement* source_ = nullptr;
     GstElement* capsfilter_ = nullptr;
     GstElement* decoder_ = nullptr;
+    GstElement* parser_ = nullptr;
     GstElement* convert_ = nullptr;
     GstElement* encoder_ = nullptr;
     GstElement* filesink_ = nullptr;
